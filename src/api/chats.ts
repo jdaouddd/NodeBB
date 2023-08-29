@@ -80,35 +80,54 @@ chatsAPI.post = async (caller: Caller, data: Data) => {
         throw new Error('[[error:too-many-messages]]');
     }
 
+    // Fire a hook and destructure the result into the 'data' variable
     ({ data } = await plugins.hooks.fire('filter:messaging.send', {
         data,
         uid: caller.uid,
     }) as { data: Data });
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call
-    await messaging.canMessageRoom(caller.uid, data.roomId!);
+
+    // Check if data.roomId, data.message, and caller.ip are defined
+    if (!data.roomId || !data.message || !caller.ip) {
+        throw new Error('Some required data is missing');
+    }
+
+    // Check if data.roomId is not null, then check if caller can message the room
+    await messaging.canMessageRoom(caller.uid, data.roomId);
+
+    // Construct and send the message
     const message = await messaging.sendMessage({
         uid: caller.uid,
-        roomId: data.roomId!,
-        content: data.message!,
+        roomId: data.roomId,
+        content: data.message,
         timestamp: Date.now(),
         ip: caller.ip,
     });
-    messaging.notifyUsersInRoom(caller.uid, data.roomId!, message);
+
+    // Notify users in the room about the new message
+    messaging.notifyUsersInRoom(caller.uid, data.roomId, message);
+
+    // Update online user status
     user.updateOnlineUsers(caller.uid);
 
+    // Return the sent message
     return message;
 };
 
+
 chatsAPI.rename = async (caller: Caller, data: Data) => {
-    await messaging.renameRoom(caller.uid, data.roomId!, data.name!);
-    const uids = await messaging.getUidsInRoom(data.roomId!, 0, -1);
-    const eventData = { roomId: data.roomId!, newName: validator.escape(String(data.name)) };
+    await messaging.renameRoom(caller.uid, data.roomId, data.name);
+    const uids = await messaging.getUidsInRoom(data.roomId, 0, -1);
+    const eventData = { roomId: data.roomId, newName: validator.escape(String(data.name)) };
 
     socketHelpers.emitToUids('event:chats.roomRename', eventData, uids);
-    return messaging.loadRoom(caller.uid, {
-        roomId: data.roomId!,
+
+    // Assuming `messaging.loadRoom` returns a Promise<RoomData>
+    return await messaging.loadRoom(caller.uid, {
+        roomId: data.roomId,
     });
 };
+
+
 
 chatsAPI.users = async (caller: Caller, data: Data) => {
     const [isOwner, users] = await Promise.all([
