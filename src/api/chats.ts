@@ -26,9 +26,8 @@ interface Caller {
 }
 
 interface UsersResponse {
-    users: Caller[]; 
+    user: Caller[]; 
 }
-
 
 interface Data {
     uids?: number[];
@@ -52,21 +51,29 @@ function rateLimitExceeded(caller: Caller): boolean {
     return false;
 }
 
-chatsAPI.create = async function (caller: Caller, data: Data) {
+interface RoomData {
+   roomId: number
+}
+
+chatsAPI.create = async (caller: Caller, data: Data): Promise<RoomData> => {
     if (rateLimitExceeded(caller)) {
         throw new Error('[[error:too-many-messages]]');
     }
-
     if (!data.uids || !Array.isArray(data.uids)) {
         throw new Error(`[[error:wrong-parameter-type, uids, ${typeof data.uids}, Array]]`);
     }
 
-    await Promise.all(data.uids.map(async uid => messaging.canMessageUser(caller.uid, uid)));
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call
-    const roomId = await messaging.newRoom(caller.uid, data.uids!);
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call
-    return await messaging.getRoomData(roomId);
+    await Promise.all(data.uids.map(async (uid) => {
+        await messaging.canMessageUser(caller.uid, uid);
+    }));
+
+    const roomId = await messaging.newRoom(caller.uid, data.uids);
+    const roomData = await messaging.getRoomData(roomId);
+    return roomData;
 };
+
+
+
 
 chatsAPI.post = async (caller: Caller, data: Data) => {
     if (rateLimitExceeded(caller)) {
