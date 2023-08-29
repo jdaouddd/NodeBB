@@ -127,27 +127,29 @@ chatsAPI.rename = async (caller: Caller, data: Data) => {
     });
 };
 
+interface User {
+    uid: number;
+    canKick: boolean;
+}
 
 
 chatsAPI.users = async (caller: Caller, data: Data) => {
     const [isOwner, users] = await Promise.all([
         messaging.isRoomOwner(caller.uid, data.roomId!),
         messaging.getUsersInRoom(data.roomId!, 0, -1),
-    ]);
+    ]) as [boolean, User[]]; 
 
     users.forEach((user) => {
-        
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call
-
-        user.canKick = (parseInt(user.uid, 10) !== caller.uid) && isOwner;
+        user.canKick = (parseInt(user.uid.toString(), 10) !== caller.uid) && isOwner;
     });
 
     return { users };
 };
 
+
 chatsAPI.invite = async (caller: Caller, data: Data) => {
     const userCount = await messaging.getUserCountInRoom(data.roomId!);
-    const maxUsers = meta.config.maximumUsersInChatRoom;
+    const maxUsers = (meta.config as { maximumUsersInChatRoom: number }).maximumUsersInChatRoom;
     if (maxUsers && userCount >= maxUsers) {
         throw new Error('[[error:cant-add-more-users-to-chat-room]]');
     }
@@ -157,12 +159,14 @@ chatsAPI.invite = async (caller: Caller, data: Data) => {
         throw new Error('[[error:no-user]]');
     }
 
-    await Promise.all(data.uids!.map(async uid => messaging.canMessageUser(caller.uid, uid)));
+    await Promise.all(data.uids!.map(async (uid: string | number) => messaging.canMessageUser(caller.uid, uid)));
     await messaging.addUsersToRoom(caller.uid, data.uids!, data.roomId!);
 
     delete data.uids;
-    return chatsAPI.users(caller, data);
+    return chatsAPI.users(caller, data) as UsersResponse; // Assuming UsersResponse is the correct type
 };
+
+
 
 
 
